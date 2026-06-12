@@ -753,7 +753,6 @@
     "Slideshow Creator": "Slideshow Creator",
     "Create video from script and images with TTS narration": "Create video from script and images with TTS narration",
     "Select script": "Select script",
-    "Select image folder": "Select image folder",
     "Image effect": "Image effect",
     "Transition": "Transition",
     "Trans dur": "Trans dur",
@@ -773,5 +772,9 @@
     "Select image folder": "Select image folder",
     "Select background music": "Select background music",
     "Resolution": "Resolution",
-    "FPS": "FPS"
+    "FPS": "FPS",
+    "Default punctuation": "Default punctuation",
+    "Restore punctuation":"Restore punctuation(cn/en)",
+    "Delete punctuation": "Delete punctuation"
+
 }

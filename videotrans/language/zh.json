@@ -770,8 +770,10 @@
     "Missing images:": "缺少图片:",
     "Generating...": "正在生成...",
     "Select script file": "选择脚本文件",
-    "Select image folder": "选择图片文件夹",
     "Select background music": "选择背景音乐",
     "Resolution": "分辨率",
-    "FPS": "帧率"
+    "FPS": "帧率",
+    "Default punctuation": "默认标点",
+    "Restore punctuation":"恢复标点(cn/en)",
+    "Delete punctuation": "删除标点"
 }

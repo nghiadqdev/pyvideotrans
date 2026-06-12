@@ -125,18 +125,17 @@ class BaseRecogn(BaseCon):
                 srt_list[i - 1]['end_time'] = it['start_time']
                 srt_list[i - 1]['endraw'] = tools.ms_to_time_string(ms=it['start_time'])
                 srt_list[i - 1]['time'] = f"{srt_list[i - 1]['startraw']} --> {srt_list[i - 1]['endraw']}"
-        if self.recogn2pass:
-            return srt_list
-        # LLM重新断句，未选中合并过短字幕、whisper模型且没有预先分割，这3种情况直接返回
-        if self.llm_post or not settings.get('merge_short_sub', True):
-            if settings.get('del_end_punc'):
-                logger.debug(f'开始移除每条字幕末尾标点')
-                for it in srt_list:
-                    # 移除末尾标点
-                    it['text'] = it['text'].strip('。，,.').strip()
-            return srt_list
-        # 合并过短的字幕到邻近字幕，以便符合 min_speech_duration_ms 要求, 第一个和最后一个字幕不合并
-        return self._merge_sub(srt_list)
+
+        # 不是LLM重新断句，并且选中合并过短字幕, 进行合并
+        if not self.recogn2pass and not self.llm_post and settings.get('merge_short_sub', True):
+            srt_list=self._merge_sub(srt_list)
+
+        if settings.get('del_end_punc'):
+            logger.debug(f'开始移除每条字幕末尾标点')
+            for it in srt_list:
+                # 移除末尾标点
+                it['text'] = it['text'].strip('。，？！,.?!').strip()
+        return srt_list
 
     def _exec(self) -> Union[List[SrtItem], None]:
         raise NotImplemented()
@@ -160,15 +159,11 @@ class BaseRecogn(BaseCon):
         # 静音阈值不得低于50ms
         _min_silence = max(int(settings.get('min_silence_duration_ms', 600)), 50)
         if self.recogn2pass:
-            # 2次识别，均减半，以便生成简短的字幕
-            _min_speech = int(max(500, _min_speech // 2))
-            # 不可低于 _min_speech+1000 并且不可大于3000ms
-            _max_speech = int(max(_max_speech // 2, _min_speech + 1000))
-            # 不可大于1000ms，并且不可小于50ms
-            _min_silence = max(min(1000, _min_silence // 2), 50)
+            # 2次识别， 生成简短的字幕, 最短持续时长>=500ms，最长持续时长>短+500 and <4000ms
+            _min_speech = max( int(float(settings.get('min_speech_duration_ms2', 1000))), 500)
+            _max_speech = max( min( int(float(settings.get('max_speech_duration_s2', 2)) * 1000), 4000), _min_speech + 500)
+            logger.debug(f'[二次识别参数]{_vad_type},{_min_speech=}ms,{_max_speech=}ms,{_min_silence=}ms')
 
-        logger.debug(
-            f'[Before VAD {_vad_type}][{self.recogn2pass=}],{_min_speech=}ms,{_max_speech=}ms,{_min_silence=}ms')
         kw = {
             "input_wav": self.audio_file,
             "threshold": _threshold,
