@@ -177,3 +177,10 @@ class TaskCfgVTT(TaskCfgSTT, TaskCfgTTS, TaskCfgSTS):
     copysrt_rawvideo: bool = False  # 是否将生成的字幕复制到视频目录下
     loop_backaudio: int = 0  # 循环背景音 或 延长拉伸背景音
     backaudio_volume: float = 0.8  # 背景音量
+    # Vùng che phụ đề gốc (delogo)
+    subtitle_mask_enable: bool = False  # Bật/tắt che phụ đề gốc
+    subtitle_mask_x: int = 0  # Tọa độ x (pixel)
+    subtitle_mask_y: int = 0  # Tọa độ y (pixel)
+    subtitle_mask_w: int = 0  # Chiều rộng vùng che (pixel)
+    subtitle_mask_h: int = 0  # Chiều cao vùng che (pixel)
+    subtitle_mask_band: int = 10  # Độ rộng dải làm mờ viền (càng lớn càng mượt)

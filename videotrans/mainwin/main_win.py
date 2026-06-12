@@ -56,7 +56,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.moshi = {
             "biaozhun": self.action_biaozhun,
-            "tiqu": self.action_tiquzimu
+            "tiqu": self.action_tiquzimu,
+            "slideshow": self.action_slideshow
         }
 
         QTimer.singleShot(200, self._set_default)
@@ -183,6 +184,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.target_language.setCurrentText(_target_language)
             if _role in _rolelist:
                 self.voice_role.setCurrentText(_role)
+
+        # === Initialize Slideshow Creator controls ===
+        from videotrans.slideshow import TRANSITION_NAMES, EFFECT_NAMES
+        self.slideshow_resolution.addItems(["1920x1080", "1280x720", "1080x1920", "720x1280", "1024x1024", "3840x2160"])
+        self.slideshow_transition.addItems(TRANSITION_NAMES)
+        self.slideshow_transition.setCurrentText("fade")
+        self.slideshow_effect.addItems(EFFECT_NAMES)
+        self.slideshow_effect.setCurrentText("zoom_in")
+        self.slideshow_language.addItems(self.languagename)
+        if _target_language and _target_language in self.languagename:
+            self.slideshow_language.setCurrentText(_target_language)
+        self.slideshow_bitrate.addItems(["2000k", "4000k", "6000k", "8000k", "12000k"])
+        self.slideshow_bitrate.setCurrentText("4000k")
+        # Fill TTS type for slideshow
+        self.slideshow_tts_type.addItems(tts.TTS_NAME_LIST)
+        self.slideshow_tts_type.setCurrentIndex(_tts_type)
+        # Fill slideshow voice roles same as main voice role
+        self.slideshow_voice_role.addItems(_rolelist)
+        if _role in _rolelist:
+            self.slideshow_voice_role.setCurrentText(_role)
+        self.slideshow_voice_rate.setValue(int(params.get('voice_rate', '0').replace('%', '')))
+        self.slideshow_volume.setValue(int(params.get('volume', '0').replace('%', '')))
+
         self._bind_signal()
 
     def _bind_signal(self):
@@ -221,6 +245,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.glossary.clicked.connect(lambda: tools.show_glossary_editor(self))
         self.action_biaozhun.triggered.connect(self.win_action.set_biaozhun)
         self.action_tiquzimu.triggered.connect(self.win_action.set_tiquzimu)
+        self.action_slideshow.triggered.connect(self.win_action.set_slideshow)
+
+        # Slideshow Creator button bindings
+        self.slideshow_script_btn.clicked.connect(self.win_action.get_slideshow_script)
+        self.slideshow_image_btn.clicked.connect(self.win_action.get_slideshow_image_dir)
+        self.slideshow_bgm_btn.clicked.connect(self.win_action.get_slideshow_bgm)
+        self.slideshow_generate_btn.clicked.connect(self.win_action.check_start_slideshow)
+        self.slideshow_voice_role.currentTextChanged.connect(self.win_action.show_slideshow_listen_btn)
+        self.slideshow_listen_btn.clicked.connect(self.win_action.listen_slideshow_voice)
+        self.slideshow_tts_type.currentIndexChanged.connect(self.win_action.tts_type_slideshow_change)
+        self.slideshow_language.currentTextChanged.connect(self.win_action.set_slideshow_voice_role)
 
         self.actionbaidu_key.triggered.connect(lambda: self.open_winform('baidu'))
         self.actionali_key.triggered.connect(lambda: self.open_winform('ali'))

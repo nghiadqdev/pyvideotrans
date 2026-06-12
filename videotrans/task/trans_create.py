@@ -67,22 +67,6 @@ class TransCreate(BaseTask):
         self.cost_duration=time.time()
         if not self.cfg.cache_folder:
             self.cfg.cache_folder = f"{config.TEMP_DIR}/{self.uuid}"
-        # 清理缓存
-        if self.cfg.clear_cache:
-            if self.cfg.target_dir and Path(self.cfg.target_dir).is_dir():
-                shutil.rmtree(self.cfg.target_dir, ignore_errors=True)
-            if self.cfg.cache_folder and Path(self.cfg.cache_folder).is_dir():
-                shutil.rmtree(self.cfg.cache_folder, ignore_errors=True)
-
-        self.signal(text=tr('kaishichuli'))
-        # -1=不启用说话人，0=启用并且不限制说话人数量，>0+1 为最大说话人数量
-        self.max_speakers = self.cfg.nums_diariz if self.cfg.enable_diariz else -1
-        if self.max_speakers > 0:
-            self.max_speakers += 1
-        self.should_recogn = True
-        # 输出编码，  264 或 265
-        self.video_codec_num = int(settings.get('video_codec', 264))
-
 
         # 输出文件夹，去掉可能存在的双斜线
         self.cfg.target_dir = re.sub(r'/{2,}', '/', self.cfg.target_dir, flags=re.I | re.S)
@@ -108,6 +92,29 @@ class TransCreate(BaseTask):
 
         # 最终需要输出的mp4视频
         self.cfg.targetdir_mp4 = f"{self.cfg.target_dir}/{self.cfg.noextname}.mp4"
+
+        # 清理缓存：nếu đã có file phụ đề trung gian thì bỏ qua xóa để resume
+        _has_source_sub = Path(self.cfg.source_sub).exists() if self.cfg.source_sub else False
+        _has_target_sub = Path(self.cfg.target_sub).exists() if self.cfg.target_sub else False
+        _has_intermediate = _has_source_sub and _has_target_sub
+
+        if self.cfg.clear_cache and not _has_intermediate:
+            if self.cfg.target_dir and Path(self.cfg.target_dir).is_dir():
+                shutil.rmtree(self.cfg.target_dir, ignore_errors=True)
+            if self.cfg.cache_folder and Path(self.cfg.cache_folder).is_dir():
+                shutil.rmtree(self.cfg.cache_folder, ignore_errors=True)
+        elif _has_intermediate:
+            logger.info('[resume] Phát hiện file phụ đề có sẵn, bỏ qua xóa cache để tiếp tục từ bước ghép video')
+            self.cfg.clear_cache = False
+
+        self.signal(text=tr('kaishichuli'))
+        # -1=不启用说话人，0=启用并且不限制说话人数量，>0+1 为最大说话人数量
+        self.max_speakers = self.cfg.nums_diariz if self.cfg.enable_diariz else -1
+        if self.max_speakers > 0:
+            self.max_speakers += 1
+        self.should_recogn = True
+        # 输出编码，  264 或 265
+        self.video_codec_num = int(settings.get('video_codec', 264))
 
         # 如果配音角色不是No 则需要配音
         if self.cfg.voice_role and self.cfg.voice_role != 'No' and self.cfg.target_language_code:
@@ -1179,6 +1186,36 @@ class TransCreate(BaseTask):
                     break
         return _join_flag
 
+    # Áp dụng delogo làm mờ vùng phụ đề gốc (encode riêng, không chain với subtitles)
+    def _apply_subtitle_mask(self) -> None:
+        if not self.cfg.subtitle_mask_enable or self.cfg.subtitle_mask_w <= 0 or self.cfg.subtitle_mask_h <= 0:
+            return
+        self.signal(text=tr("Blurring original subtitle region..."))
+        masked_mp4 = self.cfg.cache_folder + "/novoice_masked.mp4"
+        delogo_filter = f"delogo=x={self.cfg.subtitle_mask_x}:y={self.cfg.subtitle_mask_y}:w={self.cfg.subtitle_mask_w}:h={self.cfg.subtitle_mask_h}:show=0"
+        cmd = [
+            "-y",
+            "-i", os.path.basename(self.cfg.novoice_mp4),
+            "-vf", delogo_filter,
+            "-c:v", f"libx{self.video_codec_num}",
+            "-crf", "18",
+            "-preset", settings.get('preset', 'veryfast'),
+            "-an",
+            os.path.basename(masked_mp4)
+        ]
+        try:
+            logger.info(f'[delogo] Bắt đầu làm mờ phụ đề gốc: x={self.cfg.subtitle_mask_x}, y={self.cfg.subtitle_mask_y}, w={self.cfg.subtitle_mask_w}, h={self.cfg.subtitle_mask_h}')
+            tools.runffmpeg(cmd, cmd_dir=self.cfg.cache_folder)
+            if Path(masked_mp4).exists() and Path(masked_mp4).stat().st_size > 0:
+                self.cfg.novoice_mp4 = masked_mp4
+                self.is_copy_video = False
+                self.signal(text=tr("Original subtitle region blurred successfully"))
+                logger.info('[delogo] Làm mờ phụ đề gốc thành công')
+            else:
+                logger.error('[delogo] File đã xử lý không hợp lệ, bỏ qua bước làm mờ')
+        except Exception as e:
+            logger.exception(f'[delogo] Làm mờ phụ đề gốc thất bại, bỏ qua và tiếp tục: {e}', exc_info=True)
+
     # 视频定格最后一帧延长末端
     def _video_extend(self, duration_ms=1000):
         sec = duration_ms / 1000.0
@@ -1208,6 +1245,9 @@ class TransCreate(BaseTask):
         tools.is_novoice_mp4(self.cfg.novoice_mp4, self.uuid)
         if not Path(self.cfg.novoice_mp4).exists():
             raise VideoTransError(f'{self.cfg.novoice_mp4} 不存在')
+
+        # Áp dụng mask làm mờ vùng phụ đề gốc (encode riêng, không chain với subtitles)
+        self._apply_subtitle_mask()
 
         # 需要配音但没有配音文件
         if self.should_dubbing and not tools.vail_file(self.cfg.target_wav):

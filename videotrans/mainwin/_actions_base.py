@@ -248,6 +248,85 @@ class WinActionBase:
         self.show_adv_status = True
         self.toggle_adv()
 
+    # 启用Slideshow Creator模式
+    def set_slideshow(self):
+        self.main.action_slideshow.setChecked(True)
+        self.main.action_biaozhun.setChecked(False)
+        self.main.action_tiquzimu.setChecked(False)
+        self.main.action_slideshow.setChecked(True)
+        self.main.splitter.setSizes([self.main.width - 300, 300])
+        self.main.app_mode = 'slideshow'
+        self.main.show_tips.setText(
+            tr("Create a video slideshow from a script file and images with TTS narration"))
+        self.main.startbtn.setText(tr("Generate Video"))
+
+        # Hide all standard mode widgets
+        self.main.btn_get_video.hide()
+        self.main.source_mp4.hide()
+        self.main.clear_cache.hide()
+        self.main.select_file_type.hide()
+        self.main.copysrt_rawvideo.hide()
+        self.main.only_out_mp4.hide()
+        self.main.shutdown.hide()
+
+        self.main.reglabel.hide()
+        self.main.recogn_type.hide()
+        self.main.model_name_help.hide()
+        self.main.model_name.hide()
+        self.main.rephrase.hide()
+        self.main.remove_noise.hide()
+        self.main.recogn2pass.hide()
+
+        self.main.label_9.hide()
+        self.main.translate_type.hide()
+        self.main.label_2.hide()
+        self.main.source_language.hide()
+        self.main.label_3.hide()
+        self.main.target_language.hide()
+        self.main.label.hide()
+        self.main.proxy.hide()
+        self.main.aisendsrt.hide()
+        self.main.glossary.hide()
+        self.main.import_sub.hide()
+
+        self.main.tts_text.hide()
+        self.main.tts_type.hide()
+        self.main.label_4.hide()
+        self.main.voice_role.hide()
+        self.main.listen_btn.hide()
+        self.main.volume_label.hide()
+        self.main.volume_rate.hide()
+        self.main.pitch_label.hide()
+        self.main.pitch_rate.hide()
+
+        self.main.align_btn.hide()
+        self.main.voice_rate.hide()
+        self.main.label_6.hide()
+        self.main.voice_autorate.hide()
+        self.main.video_autorate.hide()
+        self.main.remove_silent_mid.hide()
+        self.main.align_sub_audio.hide()
+        self.main.subtitle_type.hide()
+        self.main.output_srt.hide()
+        self.main.output_srt_label.hide()
+
+        self.main.addbackbtn.hide()
+        self.main.embed_bgm.hide()
+        self.main.enable_diariz.hide()
+        self.main.nums_diariz.hide()
+        self.main.is_separate.hide()
+        self.main.fix_punc.hide()
+        self.main.set_ass.hide()
+        self.main.enable_cuda.hide()
+        self.main.retrybtn.hide()
+        self.main.set_adv_status.hide()
+
+        # Show slideshow widgets
+        self.main.slideshow_container.setVisible(True)
+
+        self.show_adv_status = False
+        self.toggle_adv()
+
     # 显示或隐藏高级选项
     def toggle_adv(self):
         self.show_adv_status = not self.show_adv_status
@@ -585,3 +664,97 @@ class WinActionBase:
                     self.main.app_mode = 'tiqu'
                     break
         return True
+
+    # === Slideshow Creator helper methods ===
+
+    def get_slideshow_script(self):
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.main,
+            tr("Select script file"),
+            params.get('last_opendir', ''),
+            "Script Files (*.json *.slideshow *.txt);;JSON Files (*.json *.slideshow);;Text Files (*.txt);;All Files (*)"
+        )
+        if file_path:
+            self.main.slideshow_script_label.setText(file_path)
+            self.main.slideshow_script_label.setToolTip(file_path)
+
+    def get_slideshow_image_dir(self):
+        folder_path = QtWidgets.QFileDialog.getExistingDirectory(
+            self.main,
+            tr("Select image folder"),
+            params.get('last_opendir', '')
+        )
+        if folder_path:
+            self.main.slideshow_image_label.setText(folder_path)
+            self.main.slideshow_image_label.setToolTip(folder_path)
+
+    def get_slideshow_bgm(self):
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.main,
+            tr("Select background music"),
+            params.get('last_opendir', ''),
+            "Audio Files (*.mp3 *.wav *.aac *.m4a *.ogg *.flac);;All Files (*)"
+        )
+        if file_path:
+            self.main.slideshow_bgm_label.setText(file_path)
+            self.main.slideshow_bgm_label.setToolTip(file_path)
+
+    def show_slideshow_listen_btn(self, text):
+        if text and text != 'No' and text.lower() != 'clone':
+            self.main.slideshow_listen_btn.setDisabled(False)
+        else:
+            self.main.slideshow_listen_btn.setDisabled(True)
+
+    def listen_slideshow_voice(self):
+        from videotrans import translator
+        from videotrans.configure.contants import LISTEN_TEXT
+        lang = translator.get_code(show_text=self.main.slideshow_language.currentText())
+        if not lang:
+            return tools.show_error(tr("Please select the target language first"))
+        text = LISTEN_TEXT.get(f'{lang}')
+        if not text:
+            text = "Hello, this is a test of the voice."
+
+        role = self.main.slideshow_voice_role.currentText()
+        tts_type = self.main.slideshow_tts_type.currentIndex()
+        rate = int(self.main.slideshow_voice_rate.value())
+        rate_str = f'+{rate}%' if rate >= 0 else f'{rate}%'
+        volume = int(self.main.slideshow_volume.value())
+        vol_str = f'+{volume}%' if volume >= 0 else f'{volume}%'
+
+        import uuid
+        task = ListenVoice(
+            main=self.main,
+            text=text,
+            role=role,
+            tts_type=tts_type,
+            language=lang,
+            rate=rate_str,
+            volume=vol_str,
+            pitch="+0Hz",
+        )
+        task.start()
+
+    def tts_type_slideshow_change(self, index):
+        if self.main.app_mode != 'slideshow':
+            return
+        from videotrans import translator
+        lang = translator.get_code(show_text=self.main.slideshow_language.currentText())
+        rolelist = tools.role_menu(index, lang)
+        self.main.slideshow_voice_role.clear()
+        self.main.slideshow_voice_role.addItems(rolelist)
+        # Also sync main TTS type
+        self.main.tts_type.setCurrentIndex(index)
+
+    def set_slideshow_voice_role(self, text):
+        if self.main.app_mode != 'slideshow':
+            return
+        from videotrans import translator
+        lang = translator.get_code(show_text=text)
+        tts_type = self.main.slideshow_tts_type.currentIndex()
+        rolelist = tools.role_menu(tts_type, lang)
+        self.main.slideshow_voice_role.clear()
+        self.main.slideshow_voice_role.addItems(rolelist)
+        # Also sync main target language
+        if text in self.main.languagename:
+            self.main.target_language.setCurrentText(text)

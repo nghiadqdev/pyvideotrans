@@ -176,6 +176,10 @@ def main():
             "zh": "不清理缓存",
             "en": "Do not clear cache"
         },
+        "help_subtitle_mask": {
+            "zh": "Làm mờ vùng phụ đề gốc, định dạng x:y:w:h:band\nVí dụ: 0:650:1920:100:10\nx,y=toạ độ góc trên trái, w,h=chiều rộng cao, band=độ mượt viền (mặc định 10)",
+            "en": "Blur original subtitle region, format x:y:w:h:band\nExample: 0:650:1920:100:10\nx,y=top-left, w,h=size, band=edge smoothness (default 10)"
+        },
 
         # --- 错误提示 ---
         "err_missing_task": {
@@ -345,6 +349,8 @@ def main():
     # clear_cache 默认为 True，为了方便命令行控制，增加 --no-clear-cache 选项
     vtv_group.add_argument('--clear_cache', action='store_true', default=True, help=tr("help_clear_cache"))
     vtv_group.add_argument('--no-clear-cache', dest='clear_cache', action='store_false', help=tr("help_no_clear_cache"))
+    vtv_group.add_argument('--subtitle_mask', type=str, default=None,
+                           help=tr("help_subtitle_mask"))
 
     # 解析参数
     args = parser.parse_args()
@@ -472,6 +478,22 @@ def main():
             "subtitle_type": args.subtitle_type,
             "clear_cache": args.clear_cache
         }
+        # Parse subtitle mask nếu có
+        if args.subtitle_mask:
+            try:
+                parts = args.subtitle_mask.strip().split(':')
+                if len(parts) >= 4:
+                    vtv_params["subtitle_mask_enable"] = True
+                    vtv_params["subtitle_mask_x"] = int(parts[0])
+                    vtv_params["subtitle_mask_y"] = int(parts[1])
+                    vtv_params["subtitle_mask_w"] = int(parts[2])
+                    vtv_params["subtitle_mask_h"] = int(parts[3])
+                    vtv_params["subtitle_mask_band"] = int(parts[4]) if len(parts) >= 5 else 10
+                    print(f"[Subtitle Mask] x={vtv_params['subtitle_mask_x']}, y={vtv_params['subtitle_mask_y']}, "
+                          f"w={vtv_params['subtitle_mask_w']}, h={vtv_params['subtitle_mask_h']}, "
+                          f"band={vtv_params['subtitle_mask_band']}")
+            except (ValueError, IndexError) as e:
+                parser.error(f"Invalid --subtitle_mask format '{args.subtitle_mask}'. Expected x:y:w:h[:band], e.g. 0:650:1920:100:10")
         vtv_fun({**common_params, **vtv_params})
 
 

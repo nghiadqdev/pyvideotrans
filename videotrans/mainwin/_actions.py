@@ -1,4 +1,5 @@
 import copy
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -386,6 +387,14 @@ class WinAction(WinActionBase):
         self.cfg['enable_diariz'] = self.main.enable_diariz.isChecked()
         self.cfg['recogn2pass'] = self.main.recogn2pass.isChecked()
         self.cfg['nums_diariz'] = self.main.nums_diariz.currentIndex()
+
+        # Che phụ đề gốc
+        self.cfg['subtitle_mask_enable'] = self.main.subtitle_mask_check.isChecked()
+        self.cfg['subtitle_mask_x'] = self.main.subtitle_mask_x.value()
+        self.cfg['subtitle_mask_y'] = self.main.subtitle_mask_y.value()
+        self.cfg['subtitle_mask_w'] = self.main.subtitle_mask_w.value()
+        self.cfg['subtitle_mask_h'] = self.main.subtitle_mask_h.value()
+        self.cfg['subtitle_mask_band'] = self.main.subtitle_mask_band.value()
 
         # 核对识别是否正确
         if self.check_reccogn() is not True:
@@ -794,4 +803,117 @@ class WinAction(WinActionBase):
         active = [obj for obj in self.obj_list if obj['uuid'] not in app_cfg.stoped_uuid_set]
         if not active:
             self.update_status('end')
-            self.main.retrybtn.setVisible(bool(self.retry_queue_mp4))
+
+    # Slideshow Creator - start generation
+    def check_start_slideshow(self):
+        if app_cfg.current_status == 'ing':
+            self.update_status('stop')
+            return
+
+        self.main.slideshow_generate_btn.setDisabled(True)
+
+        script_path = self.main.slideshow_script_label.text().strip()
+        image_dir = self.main.slideshow_image_label.text().strip()
+
+        if not script_path or not os.path.exists(script_path):
+            tools.show_error(tr("Please select a valid script file"))
+            self.main.slideshow_generate_btn.setDisabled(False)
+            return
+
+        if not image_dir or not os.path.isdir(image_dir):
+            tools.show_error(tr("Please select a valid image folder"))
+            self.main.slideshow_generate_btn.setDisabled(False)
+            return
+
+        target_dir = self.main.target_dir or str(Path(script_path).parent)
+        output_name = Path(script_path).stem + "_slideshow.mp4"
+        output_file = os.path.join(target_dir, output_name)
+
+        from videotrans.slideshow import SlideshowConfig
+        from videotrans.slideshow.parser import parse_script, parse_script_meta
+        from videotrans.slideshow.task import SlideshowWorker
+        from videotrans import translator as trans_mod
+
+        import uuid as uuid_mod
+
+        cfg = SlideshowConfig()
+        cfg.script_file = script_path
+        cfg.image_dir = image_dir
+        cfg.output_file = output_file
+        cfg.output_dir = target_dir
+        cfg.resolution = self.main.slideshow_resolution.currentText()
+        cfg.fps = self.main.slideshow_fps.value()
+        cfg.tts_type = self.main.slideshow_tts_type.currentIndex()
+        cfg.voice_role = self.main.slideshow_voice_role.currentText()
+        cfg.language = trans_mod.get_code(show_text=self.main.slideshow_language.currentText())
+        try:
+            cfg.voice_rate = f"{'+' if int(self.main.slideshow_voice_rate.value()) >= 0 else ''}{self.main.slideshow_voice_rate.value()}%"
+        except (ValueError, TypeError):
+            cfg.voice_rate = "+0%"
+        try:
+            cfg.volume = f"{'+' if int(self.main.slideshow_volume.value()) >= 0 else ''}{self.main.slideshow_volume.value()}%"
+        except (ValueError, TypeError):
+            cfg.volume = "+0%"
+        cfg.pitch = "+0Hz"
+        cfg.bg_music = self.main.slideshow_bgm_label.text().strip()
+        cfg.bg_volume = self.main.slideshow_bgm_volume.value()
+        cfg.default_transition = self.main.slideshow_transition.currentText()
+        cfg.transition_duration = self.main.slideshow_trans_dur.value()
+        cfg.default_effect = self.main.slideshow_effect.currentText()
+        cfg.show_subtitle = self.main.slideshow_sub_check.isChecked()
+        cfg.video_bitrate = self.main.slideshow_bitrate.currentText()
+        cfg.is_cuda = self.main.enable_cuda.isChecked()
+        cfg.uuid = uuid_mod.uuid4().hex
+
+        # Parse script metadata
+        meta = parse_script_meta(script_path)
+        if meta.get("resolution"):
+            cfg.resolution = meta["resolution"]
+        if meta.get("fps"):
+            cfg.fps = meta["fps"]
+        if meta.get("bg_music") and not cfg.bg_music:
+            from pathlib import Path
+            bgm_path = os.path.join(image_dir, meta["bg_music"])
+            if os.path.exists(bgm_path):
+                cfg.bg_music = bgm_path
+        if meta.get("bg_volume"):
+            cfg.bg_volume = float(meta["bg_volume"])
+        if meta.get("default_transition"):
+            cfg.default_transition = meta["default_transition"]
+        if meta.get("transition_duration"):
+            cfg.transition_duration = float(meta["transition_duration"])
+        if meta.get("default_effect"):
+            cfg.default_effect = meta["default_effect"]
+        if meta.get("video_bitrate"):
+            cfg.video_bitrate = meta["video_bitrate"]
+
+        # Parse scenes
+        try:
+            cfg.scenes = parse_script(script_path, image_dir)
+        except Exception as e:
+            tools.show_error(tr("Failed to parse script:") + f"\n{str(e)}")
+            self.main.slideshow_generate_btn.setDisabled(False)
+            return
+
+        if not cfg.scenes:
+            tools.show_error(tr("No scenes found in script"))
+            self.main.slideshow_generate_btn.setDisabled(False)
+            return
+
+        # Validate images exist
+        missing = [s.image for s in cfg.scenes if not os.path.exists(s.image)]
+        if missing:
+            tools.show_error(tr("Missing images:") + f"\n" + "\n".join(missing[:5]))
+            self.main.slideshow_generate_btn.setDisabled(False)
+            return
+
+        self.add_process_btn(target_dir=target_dir, name=output_name, uuid=cfg.uuid)
+        self.cfg['app_mode'] = 'slideshow'
+
+        worker = SlideshowWorker(cfg, parent=self.main)
+        worker.uito.connect(self.update_data)
+        app_cfg.current_status = 'ing'
+        worker.start()
+
+        self.main.slideshow_generate_btn.setText(tr("Generating..."))
+        self.main.slideshow_generate_btn.setDisabled(True)
